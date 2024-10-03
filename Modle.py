@@ -18,14 +18,17 @@ from Useragent import useragent
 class Clipboard(QtCore.QThread):
     def __init__(self):
         super().__init__()
+        # 剪贴板数据
         self.data = ""
 
     def run(self):
         while True:
             try:
-                win32clipboard.OpenClipboard()
-                self.data = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
-                win32clipboard.CloseClipboard()
+                win32clipboard.OpenClipboard()  # 打开剪贴板
+                self.data = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)  # 读取剪贴板
+                win32clipboard.CloseClipboard()  # 关闭剪贴板
+            # 「有些时候读取剪贴板回报错，目前猜测可能是因为有其他进程正在使用剪贴板」
+            # 「不管为何，反正不是致命性错误，就直接忽略就行了
             except pywintypes.error:
                 continue
 
@@ -94,44 +97,56 @@ class VisibleAndMove(QtCore.QThread):
 
 
 class Download(QtCore.QThread):
+    # 下载结束信号
     finish = QtCore.pyqtSignal()
 
     def __init__(self, download_url):
         super().__init__()
+        # 包含一个或多个链接的文本的字符串
         self.download_url = download_url
+        # 包含下载链接与歌曲名称的二维列表
         self.download_urls = []
 
     def run(self):
+        # 『调试代码，早晚得改』
         self.download("./")
 
     def get_urls(self):
-        download_urls = []
+        download_urls = []  # 包含所有找到的url
+
+        # 提取所有的单个音乐链接
         single = re.findall(r"(https://)?music\.163\.com(/#)?(/song\?id=\d+)", self.download_url)
         single_songs = [i[2] for i in single]
-        download_urls += single_songs
+        download_urls += single_songs  # 将获取到的链接存入变量
 
-        playlist_songs = []
+        playlist_songs = []  # 记录所有找到的歌单链接
+        # 提取所有的歌单链接
         playlist = re.findall(r"(https://)?music\.163\.com/(#/)?playlist\?id=(\d+)", self.download_url)
         playlist = [i[2] for i in playlist]
         for i in playlist:
-            ret = requests.get(f"https://music.163.com/playlist?id={i}", headers={
-                "User-Agent": random.choice(useragent)}, cookies={'os': 'pc'}).text
+            # 请求网易云音乐官网，获取每个歌单的包含的歌曲
+            # 「请求时必须加上Cookie:os=pc,否则最多获得10/20个音乐」
+            # 「太过分了！」
+            ret = requests.get(f"https://music.163.com/playlist?id={i}", headers={"User-Agent": random.choice(useragent)}, cookies={'os': 'pc'}).text
             ret_html = html.fromstring(ret)
             playlist_songs += ret_html.xpath('//div[@id="song-list-pre-cache"]/ul/li/a/@href')
-        download_urls += playlist_songs
+        download_urls += playlist_songs  # 将获取到的链接存入变量
 
-        album_songs = []
+        album_songs = []  # 记录所有的专辑链接
+        # 获取所有的专辑链接
         album = re.findall(r"(https://)?music\.163\.com/(#/)?album\?id=(\d+)", self.download_url)
         album = [i[2] for i in album]
         for i in album:
-            ret = requests.get(f"https://music.163.com/album?id={i}", headers={
-                "User-Agent": random.choice(useragent)}, cookies={'os': 'pc'}).text
+            # 「虽然在这里现在没有必要写上Cookie，但以后就不好说了。所有先写着吧~」
+            ret = requests.get(f"https://music.163.com/album?id={i}", headers={"User-Agent": random.choice(useragent)}, cookies={'os': 'pc'}).text
             ret_html = html.fromstring(ret)
             album_songs += ret_html.xpath('//div[@id="song-list-pre-cache"]/ul/li/a/@href')
-        download_urls += album_songs
+        download_urls += album_songs  # 将获取到的链接存入变量
 
+        # 将所有的歌曲ID转换为歌曲链接
         download_urls = [f"https://music.163.com{i}" for i in download_urls]
 
+        # 分别获取每首歌的名称
         download_names = []
         for i in download_urls:
             ret = requests.get(i, headers={"User-Agent": random.choice(useragent)}).text
@@ -145,16 +160,20 @@ class Download(QtCore.QThread):
         return download_urls, download_names
 
     def download(self, save_dir):
+        # 把歌曲链接转换为下载链接
+        # 「我也不知道先把ID转为链接，再把链接转为下载链接有什么意义」
         urls = [[re.sub(r"https://music.163.com/song\?id=",
                         "https://music.163.com/song/media/outer/url?id=", i[0]),
                  i[1]] for i in self.download_urls]
+        # 下载音乐
         for i in urls:
-            url = f"{i[0]}.mp3"
-            res = requests.get(url, headers={"User-Agent": random.choice(useragent)})
+            res = requests.get(f"{i[0]}.mp3", headers={"User-Agent": random.choice(useragent)})
+            # 判断获取到的内容 1.返回200 2.不是网页内容（VIP内容）
             if res.status_code == 200 and not res.text.startswith("<!DOCTYPE html>"):
                 print("成功！（200）")
                 with open(f"{save_dir}/{i[1]}.mp3", "wb") as f:
                     f.write(res.content)
             else:
                 print("失败，本音乐无法下载，跳过本歌曲！")
+        # 发送完成信号
         self.finish.emit()
