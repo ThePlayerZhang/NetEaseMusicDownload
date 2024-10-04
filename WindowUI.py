@@ -27,7 +27,6 @@ class DownloadButtonUI(QtWidgets.QMainWindow, DownloadButton.Ui_MainWindow):
         super().__init__()
 
         self.main_window = MainWindowUI()
-        self.download_window = DownloadWindowUI()
 
         # 初始化UI
         self.setObjectName("MainWindow")
@@ -71,7 +70,8 @@ class DownloadButtonUI(QtWidgets.QMainWindow, DownloadButton.Ui_MainWindow):
         self.clipboard.update.connect(self.update_clipboard)
 
     def download_action(self):
-        self.download_window.start(self.clipboard.data)
+        # print(self.clipboard.data)
+        self.main_window.show(GetUrl(self.clipboard.data))
 
     def update_clipboard(self, data):
         self.visible_and_move.clipboard = data
@@ -85,6 +85,7 @@ class DownloadButtonUI(QtWidgets.QMainWindow, DownloadButton.Ui_MainWindow):
     def move_to(self, pos):
         self.move(pos[0], pos[1])
 
+
 class MainWindowUI(QtWidgets.QMainWindow, MainWindow.Ui_MainWindow):
     def __init__(self):
         super().__init__()
@@ -94,54 +95,62 @@ class MainWindowUI(QtWidgets.QMainWindow, MainWindow.Ui_MainWindow):
         self.setWindowIcon(QtGui.QIcon(self.filename))
         self.setWindowTitle("网易云音乐歌曲本地化助手")
 
+    def show(self, url=None):
+        url.finnish.connect(self.get_urls)
+        url.start()
+        super().show()
+
+    def get_urls(self, urls):
+        print(urls)
+
     def closeEvent(self, event):
         event.ignore()
         self.hide()
 
 
-class DownloadWindowUI(QtWidgets.QMainWindow, MainWindow.Ui_MainWindow):
-    def __init__(self):
-        super().__init__()
-        self.filename = resource_path(os.path.join("res/icon.png"))
-        self.setupUi(self)
-        self.setWindowIcon(QtGui.QIcon(self.filename))
-        self.setWindowTitle("网易云音乐歌曲本地化助手")
-        self.setWindowFlags(QtCore.Qt.WindowType.WindowStaysOnTopHint)
-
-        self.pushButton.hide()
-        self.lineEdit.hide()
-        self.label.hide()
-
-        self.download = None
-        self.downloading = False
-        self.download_window = DownloadingUI()
-        self.pushButton.clicked.connect(self.start_download)
-
-    def start(self, download_url):
-        self.pushButton.show()
-        self.toolButton.show()
-        self.lineEdit.show()
-        self.progressBar.hide()
-        self.download = Download(download_url)
-        urls, names = self.download.get_urls()
-        print(urls, names)
-        self.link.setText(" ".join(urls))
-        self.name.setText(" ".join(names))
-        self.download.finish.connect(self.finnish_download)
-        self.show()
-
-    def finnish_download(self):
-        self.downloading = False
-
-    def start_download(self):
-        self.downloading = True
-        self.pushButton.hide()
-        self.toolButton.hide()
-        self.lineEdit.hide()
-        self.progressBar.show()
-        self.download.start()
-
-    def closeEvent(self, event):
-        event.ignore()
-        if not self.downloading:
-            self.hide()
+# class DownloadWindowUI(QtWidgets.QMainWindow, MainWindow.Ui_MainWindow):
+#     def __init__(self):
+#         super().__init__()
+#         self.filename = resource_path(os.path.join("res/icon.png"))
+#         self.setupUi(self)
+#         self.setWindowIcon(QtGui.QIcon(self.filename))
+#         self.setWindowTitle("网易云音乐歌曲本地化助手")
+#         self.setWindowFlags(QtCore.Qt.WindowType.WindowStaysOnTopHint)
+#
+#         self.pushButton.hide()
+#         self.lineEdit.hide()
+#         self.label.hide()
+#
+#         self.download = None
+#         self.downloading = False
+#         self.download_window = DownloadingUI()
+#         self.pushButton.clicked.connect(self.start_download)
+#
+#     def start(self, download_url):
+#         self.pushButton.show()
+#         self.toolButton.show()
+#         self.lineEdit.show()
+#         self.progressBar.hide()
+#         self.download = Download(download_url)
+#         urls, names = self.download.get_urls()
+#         print(urls, names)
+#         self.link.setText(" ".join(urls))
+#         self.name.setText(" ".join(names))
+#         self.download.finish.connect(self.finnish_download)
+#         self.show()
+#
+#     def finnish_download(self):
+#         self.downloading = False
+#
+#     def start_download(self):
+#         self.downloading = True
+#         self.pushButton.hide()
+#         self.toolButton.hide()
+#         self.lineEdit.hide()
+#         self.progressBar.show()
+#         self.download.start()
+#
+#     def closeEvent(self, event):
+#         event.ignore()
+#         if not self.downloading:
+#             self.hide()
