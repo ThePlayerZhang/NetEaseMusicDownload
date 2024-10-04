@@ -9,7 +9,7 @@ import win32clipboard
 import win32con
 import win32gui
 import win32process
-from PyQt5 import QtCore
+from PyQt5 import QtCore, QtWidgets
 from lxml import html
 
 from Useragent import useragent
@@ -133,7 +133,9 @@ class Download(QtCore.QThread):
 
 
 class GetUrl(QtCore.QThread):
-    finnish = QtCore.pyqtSignal(tuple)
+    finnish = QtCore.pyqtSignal(list)
+    loading = QtCore.pyqtSignal(str)
+
     def __init__(self, download_url):
         super().__init__()
         self.download_url = download_url
@@ -175,13 +177,29 @@ class GetUrl(QtCore.QThread):
         # 将所有的带部分链接的ID转换为歌曲ID
         download_urls = [re.findall(r"\d+", i)[0] for i in download_urls]
 
+        # 初始化计数器
+        count_all = len(download_urls)
+        count = 0
+
         # 分别获取每首歌的名称
         download_names = []
         for i in download_urls:
+            self.loading.emit(f"加载中({count}/{count_all})...")
             ret = requests.get(rf"https://music.163.com/song?id={i}", headers={"User-Agent": random.choice(useragent)}).text
             ret_html = html.fromstring(ret)
             download_names += ret_html.xpath('/html/body/div[3]/div[1]/div/div/div[1]/div[1]/div[2]/div['
                                              '1]/div/em/text()')
+            count += 1
         download_names = [re.sub(r"[/\\:*?\"<>|]", " ", i) for i in download_names]
+        self.loading.emit(f"加载中({count_all}/{count_all})...")
+        time.sleep(0.1)
 
-        self.finnish.emit((download_urls, download_names))
+        self.finnish.emit(list(zip(download_urls, download_names)))
+
+
+class SmartButton(QtWidgets.QPushButton):
+    def __init__(self, name, command, table_id):
+        super().__init__(name)
+        # noinspection PyUnresolvedReferences
+        self.clicked.connect(lambda: command(table_id))
+        self.setStyleSheet("QPushButton{margin:3px};")
