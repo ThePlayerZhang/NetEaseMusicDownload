@@ -63,9 +63,18 @@ class DownloadButtonUI(QtWidgets.QMainWindow, DownloadButton.Ui_MainWindow):
         self.clipboard = Clipboard()
         self.visible_and_move.start()
         self.clipboard.start()
+        self.visible_and_move.menuBut_show.connect(self.menuBut.show)
+        self.visible_and_move.menuBut_hide.connect(self.menuBut.hide)
+        self.visible_and_move.downloadBut_show.connect(self.downloadBut.show)
+        self.visible_and_move.downloadBut_hide.connect(self.downloadBut.hide)
+        self.visible_and_move.move.connect(self.move_to)
+        self.clipboard.update.connect(self.update_clipboard)
 
     def download_action(self):
         self.download_window.start(self.clipboard.data)
+
+    def update_clipboard(self, data):
+        self.visible_and_move.clipboard = data
 
     def add_action(self, text='empty', callback=None):
         action = QtWidgets.QAction(text, self)
@@ -73,6 +82,8 @@ class DownloadButtonUI(QtWidgets.QMainWindow, DownloadButton.Ui_MainWindow):
         action.triggered.connect(callback)
         self.tray_menu.addAction(action)
 
+    def move_to(self, pos):
+        self.move(pos[0], pos[1])
 
 class MainWindowUI(QtWidgets.QMainWindow, MainWindow.Ui_MainWindow):
     def __init__(self):

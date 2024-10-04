@@ -16,6 +16,9 @@ from Useragent import useragent
 
 
 class Clipboard(QtCore.QThread):
+    
+    update = QtCore.pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         # 剪贴板数据
@@ -31,7 +34,7 @@ class Clipboard(QtCore.QThread):
             # 「不管为何，反正不是致命性错误，就直接忽略就行了
             except pywintypes.error:
                 continue
-
+            self.update.emit(self.data)
             time.sleep(0.5)
 
 
