@@ -1,6 +1,8 @@
 import random
 import re
 import time
+import sys
+import os
 
 import psutil
 import pywintypes
@@ -134,11 +136,12 @@ class Download(QtCore.QThread):
 
 class GetUrl(QtCore.QThread):
     finnish = QtCore.pyqtSignal(list)
-    loading = QtCore.pyqtSignal(str)
+    loading = QtCore.pyqtSignal(str, list)
 
     def __init__(self, download_url):
         super().__init__()
         self.download_url = download_url
+        self.stop = False
 
     def run(self):
         download_urls = []  # 包含所有找到的url
@@ -184,22 +187,93 @@ class GetUrl(QtCore.QThread):
         # 分别获取每首歌的名称
         download_names = []
         for i in download_urls:
-            self.loading.emit(f"加载中({count}/{count_all})...")
-            ret = requests.get(rf"https://music.163.com/song?id={i}", headers={"User-Agent": random.choice(useragent)}).text
+            if self.stop:
+                return
+            self.loading.emit(f"加载中({count}/{count_all})...", list(zip(download_urls, download_names)))
+            ret = requests.get(rf"https://music.163.com/song?id={i}",
+                               headers={"User-Agent": random.choice(useragent)}).text
             ret_html = html.fromstring(ret)
             download_names += ret_html.xpath('/html/body/div[3]/div[1]/div/div/div[1]/div[1]/div[2]/div['
                                              '1]/div/em/text()')
             count += 1
+        # 防止歌曲名出现特殊字符
         download_names = [re.sub(r"[/\\:*?\"<>|]", " ", i) for i in download_names]
-        self.loading.emit(f"加载中({count_all}/{count_all})...")
-        time.sleep(0.1)
+        self.loading.emit(f"加载中({count_all}/{count_all})...", list(zip(download_urls, download_names)))
+        time.sleep(0.1)  # 「等待0.1秒，好让用户看清加载完毕（bushi）」
 
         self.finnish.emit(list(zip(download_urls, download_names)))
 
 
 class SmartButton(QtWidgets.QPushButton):
-    def __init__(self, name, command, table_id):
+    def __init__(self, name, command, table_id, disabled):
         super().__init__(name)
         # noinspection PyUnresolvedReferences
+        # 「Pycharm总是会把pyqtSignal.connect当成错误，所以只好加一句注释啦~ qwq」
         self.clicked.connect(lambda: command(table_id))
+        self.setDisabled(disabled)
         self.setStyleSheet("QPushButton{margin:3px};")
+
+
+# 「从四字网站『借鉴』的代码，反正能跑，用于配合*.spec文件用pyinstaller把资源打包进*.exe」
+def resource_path(relative_path):
+    if getattr(sys, 'frozen', False):
+        # noinspection PyProtectedMember
+        base_path = sys._MEIPASS
+    else:
+        base_path = "./"
+    ret_path = os.path.join(base_path, relative_path)
+    return ret_path
+
+
+def get_html(url):
+    ret = requests.get(url, headers={"User-Agent": random.choice(useragent)}, cookies={'os': 'pc'})
+    if ret.status_code == 200:
+        return html.fromstring(ret.text)
+    else:
+        return -1
+
+
+class GetUrl2(QtCore.QThread):
+    finnish = QtCore.pyqtSignal(list)
+    loading = QtCore.pyqtSignal(str, list)
+
+    def __init__(self, download_data):
+        super().__init__()
+        self.download_data = download_data
+        self.running = True
+        self.artist_compile = re.compile(r"(https://)?music\.163\.com(/#)?/(artist/album\?id=\d+)")
+        self.album_compile = re.compile(r"(https://)?music\.163\.com(/#)?/((?:album|artist|discover/toplist)?\?id=\d+)")
+        self.song_compile = re.compile(r"(https://)?music\.163\.com(/#)?/song\?id=(\d+)")
+
+    def run(self):
+        artist = re.findall(self.artist_compile, self.download_data)
+
+        album = []
+        for ret in artist:
+            ret_html = get_html("https://music.163.com/" + ret[2])
+            pages_text = ret_html.xpath('//body/div[3]/div[1]/div/div/div[2]/a/@href')
+            if pages_text:
+                pages = re.findall(r"t=(\d+)", pages_text[-2])
+                limit = int(pages[0]) + int(pages[1])
+                ret_html = get_html(f"https://music.163.com{ret[2]}&limit={limit}")
+            album += ret_html.xpath('//*[@id="m-song-module"]/li/p[1]/a/@href')
+
+        album += re.findall(self.album_compile, self.download_data)
+
+        song = []
+        for ret in album:
+            ret_html = get_html("https://music.163.com/" + ret[2])
+            ret_song = ret_html.xpath('//div[@id="song-list-pre-cache"]/ul/li/a/@href')
+            song = song + [re.findall(r"\d+", i)[0] for i in ret_song]
+
+        ret_song = re.findall(self.song_compile, self.download_data)
+        song = song + [ret[2] for ret in ret_song]
+        name = []
+        for ret in song:
+            ret_html = get_html("https://music.163.com/song?id=" + ret)
+            name += ret_html.xpath('/html/body/div[3]/div[1]/div/div/div[1]/div[1]/div[2]/div[1]/div/em/text()')
+
+        return_ = list(zip(song, name))
+        self.finnish.emit(return_)
+
+
